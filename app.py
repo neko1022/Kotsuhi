@@ -61,9 +61,9 @@ css_code = f"""
 
     /* 各列の幅調整 */
     .col-date {{ width: 60px; }}
-    .col-dist {{ width: 80px; }}
-    .col-high {{ width: 100px; }}
-    .col-total {{ width: 110px; }}
+    .col-dist {{ width: 150px; }}
+    .col-high {{ width: 150px; }}
+    .col-total {{ width: 150px; }}
     .col-route {{ width: auto; }}
 
 </style>
