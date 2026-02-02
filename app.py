@@ -62,9 +62,9 @@ css_code = f"""
 
     /* ★各列の幅調整（ここで数値を変更）★ */
     .col-date {{ width: 60px; }}    /* 日付：固定幅 */
-    .col-dist {{ width: 100px; }}    /* 距離：固定幅 */
-    .col-high {{ width: 100px; }}    /* 高速代：固定幅 */
-    .col-total {{ width: 100px; }}   /* 合計：固定幅 */
+    .col-dist {{ width: 150px; }}    /* 距離：固定幅 */
+    .col-high {{ width: 150px; }}    /* 高速代：固定幅 */
+    .col-total {{ width: 150px; }}   /* 合計：固定幅 */
     .col-route {{ width: auto; }}   /* 区間：余った幅をすべて使う */
 
 </style>
