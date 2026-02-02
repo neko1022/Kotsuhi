@@ -49,7 +49,6 @@ css_code = f"""
     .summary-item {{ font-size: 0.9rem; color: #555; }}
     .summary-val {{ font-size: 1.2rem; font-weight: bold; color: #1A237E; }}
 
-    /* テーブル全体の幅 */
     .table-style {{ 
         width: 100%; 
         border-collapse: collapse;  
@@ -61,11 +60,11 @@ css_code = f"""
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
     /* 各列の幅調整 */
-    .col-date {{ width: 60px; }}    /* 日付：固定幅 */
-    .col-dist {{ width: 80px; }}    /* 距離：固定幅 */
-    .col-high {{ width: 100px; }}    /* 高速代：固定幅 */
-    .col-total {{ width: 110px; }}   /* 合計：固定幅 */
-    .col-route {{ width: auto; }}   /* 区間：余った幅をすべて使う */
+    .col-date {{ width: 60px; }}
+    .col-dist {{ width: 80px; }}
+    .col-high {{ width: 100px; }}
+    .col-total {{ width: 110px; }}
+    .col-route {{ width: auto; }}
 
 </style>
 """
@@ -124,7 +123,7 @@ if is_admin:
                 with c_at: st.write(f"{int(row['合計金額']):,} 円")
                 if show_det:
                     u_det = admin_df[admin_df["名前"] == row["名前"]].copy()
-                    # 管理者側テーブル修正
+                    # 管理者側明細にもカンマと円を追加
                     rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in u_det.iterrows()])
                     st.markdown(f'<table class="table-style"><thead><tr><th class="col-date">日付</th><th class="col-route">区間</th><th class="col-dist">距離</th><th class="col-high">高速</th><th class="col-total">合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
                 st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
@@ -156,8 +155,11 @@ else:
                     return float(val) if val else 0.0
                 except: return 0.0
 
-            dist_val, high_val = get_clean_float(dist_str), get_clean_float(high_str)
+            # 計算実行（NameError防止のため、変数を確実に定義してから計算）
+            dist_val = get_clean_float(dist_str)
+            highway_val = get_clean_float(high_str)
             auto_total = int((dist_val * gas_price) + highway_val)
+            
             st.markdown(f"**合計計算: {auto_total:,} 円**")
 
             if st.button("登録する", use_container_width=True):
@@ -169,7 +171,7 @@ else:
             if not filtered_df.empty:
                 st.markdown("---")
                 st.write("### 🗓️ 走行明細履歴")
-                # 個人側テーブル修正：距離にkm、高速・合計にカンマと円を追加
+                # 個人側明細：距離にkm、高速代と合計金額にカンマと円を追加
                 rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
                 st.markdown(f'<table class="table-style"><thead><tr><th class="col-date">日付</th><th class="col-route">区間</th><th class="col-dist">距離</th><th class="col-high">高速</th><th class="col-total">合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
 
