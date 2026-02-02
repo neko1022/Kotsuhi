@@ -39,7 +39,6 @@ css_code = f"""
     .gas-settings {{ background: #f0f2f6; padding: 15px; border-radius: 10px; border: 2px solid #1A237E; margin-bottom: 20px; }}
     .stButton>button {{ background-color: #1A237E !important; color: white !important; border-radius: 25px !important; font-weight: bold !important; }}
     
-    /* 集計ボックスのスタイル */
     .summary-box {{
         background-color: #ffffff;
         padding: 15px;
@@ -135,7 +134,8 @@ else:
             selected_month = st.selectbox("表示月", month_list) if month_list else ""
             filtered_df = df_all[(df_all['年月'] == selected_month) & (df_all['名前'] == selected_user)].copy() if selected_month else pd.DataFrame(columns=COLS)
             
-            st.markdown(f'<div class="header-box"><p class="total-label">{selected_user} さんの合計</p><p class="total-a">{int(filtered_df["合計金額"].sum()):,} 円</p></div>', unsafe_allow_html=True)
+            # ★修正：ここにあった「〇〇さんの合計」金額表示を削除★
+            st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
             st.markdown(f'<div class="form-title">🚗 走行データ入力 (単価: {gas_price}円/km)</div>', unsafe_allow_html=True)
             c1, c2 = st.columns(2)
@@ -169,11 +169,10 @@ else:
                 st.markdown("---")
                 st.write("### 🗓️ 走行明細履歴")
                 
-                # テーブル表示
                 rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
                 st.markdown(f'<table class="table-style"><thead><tr><th>日付</th><th>区間</th><th>距離</th><th>高速代</th><th>合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
 
-                # --- 今回追加した集計ボックス ---
+                # 集計ボックス
                 sum_dist = filtered_df["走行距離"].sum()
                 sum_highway = filtered_df["高速道路料金"].sum()
                 sum_total = filtered_df["合計金額"].sum()
@@ -197,7 +196,6 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
 
-                # 削除モード
                 st.write("")
                 delete_mode = st.toggle("🗑️ 編集・削除モード")
                 if delete_mode:
@@ -209,7 +207,7 @@ else:
                                 df_all.drop(idx).drop(columns=['年月'], errors='ignore').to_csv(CSV_FILE, index=False)
                                 st.rerun()
 
-# JavaScript (テンキー対応)
+# JavaScript
 components.html("""
     <script>
     const doc = window.parent.document;
