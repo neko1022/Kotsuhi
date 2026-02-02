@@ -37,7 +37,6 @@ css_code = f"""
     .gas-settings {{ background: #f0f2f6; padding: 15px; border-radius: 10px; border: 2px solid #1A237E; margin-bottom: 20px; }}
     .stButton>button {{ background-color: #1A237E !important; color: white !important; border-radius: 25px !important; font-weight: bold !important; }}
     
-    /* 集計ボックス */
     .summary-box {{
         background-color: #ffffff;
         padding: 15px;
@@ -60,12 +59,12 @@ css_code = f"""
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
-    /* ★列幅の固定設定（強制適用）★ */
-    .col-date {{ width: 60px !important; }}
-    .col-dist {{ width: 150px !important; }}
-    .col-high {{ width: 150px !important; }}
-    .col-total {{ width: 150px !important; }}
-    .col-route {{ width: auto !important; }}
+    /* ★比率による列幅の固定設定（1:4:3:3:3に近い比率）★ */
+    .col-date {{ width: 7% !important; }}  /* 日付 */
+    .col-route {{ width: 30% !important; }} /* 区間 */
+    .col-dist {{ width: 20% !important; }}  /* 距離 */
+    .col-high {{ width: 20% !important; }}  /* 高速 */
+    .col-total {{ width: 23% !important; }} /* 合計 */
 
 </style>
 """
@@ -125,7 +124,6 @@ if is_admin:
                 
                 if show_det:
                     u_det = admin_df[admin_df["名前"] == row["名前"]].copy()
-                    # 管理者側テーブル：thにクラス名を確実に追加
                     rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in u_det.iterrows()])
                     st.markdown(f'<table class="table-style"><thead><tr><th class="col-date">日付</th><th class="col-route">区間</th><th class="col-dist">距離</th><th class="col-high">高速</th><th class="col-total">合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
                     
@@ -158,7 +156,6 @@ else:
                 route = st.text_input("区間", placeholder="事務所〜現場")
             with c2:
                 dist_str = st.text_input("走行距離 (km)", placeholder="10.5")
-                # ★修正：value="0" を削除して空欄にしました★
                 high_str = st.text_input("高速道路料金 (円)", placeholder="例: 1500")
 
             def get_clean_float(s):
@@ -181,7 +178,6 @@ else:
             if not filtered_df.empty:
                 st.markdown("---")
                 st.write("### 🗓️ 走行明細履歴")
-                # 個人側テーブル：thにクラス名を確実に追加
                 rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
                 st.markdown(f'<table class="table-style"><thead><tr><th class="col-date">日付</th><th class="col-route">区間</th><th class="col-dist">距離</th><th class="col-high">高速</th><th class="col-total">合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
 
