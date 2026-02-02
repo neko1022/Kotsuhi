@@ -171,4 +171,55 @@ else:
                 
                 # テーブル表示
                 rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
-                st.markdown(f'<table class="table-style"><thead><tr><th>日付</th><th>区間</th><th>距離</th><th>高速代</th><th>合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_
+                st.markdown(f'<table class="table-style"><thead><tr><th>日付</th><th>区間</th><th>距離</th><th>高速代</th><th>合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
+
+                # --- 今回追加した集計ボックス ---
+                sum_dist = filtered_df["走行距離"].sum()
+                sum_highway = filtered_df["高速道路料金"].sum()
+                sum_total = filtered_df["合計金額"].sum()
+
+                st.markdown(f"""
+                <div class="summary-box">
+                    <div style="display: flex; justify-content: space-around; text-align: center;">
+                        <div>
+                            <div class="summary-item">走行距離 合計</div>
+                            <div class="summary-val">{sum_dist:,.1f} km</div>
+                        </div>
+                        <div>
+                            <div class="summary-item">高速料金 合計</div>
+                            <div class="summary-val">{int(sum_highway):,} 円</div>
+                        </div>
+                        <div>
+                            <div class="summary-item">総合計</div>
+                            <div class="summary-val">{int(sum_total):,} 円</div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # 削除モード
+                st.write("")
+                delete_mode = st.toggle("🗑️ 編集・削除モード")
+                if delete_mode:
+                    for idx, row in filtered_df.iterrows():
+                        cols = st.columns([5, 1])
+                        with cols[0]: st.write(f"【{row['日付'].strftime('%m-%d')}】 {row['区間']} / {int(row['合計金額']):,}円")
+                        with cols[1]:
+                            if st.button("🗑️", key=f"del_{idx}"):
+                                df_all.drop(idx).drop(columns=['年月'], errors='ignore').to_csv(CSV_FILE, index=False)
+                                st.rerun()
+
+# JavaScript (テンキー対応)
+components.html("""
+    <script>
+    const doc = window.parent.document;
+    setInterval(() => {
+        const inputs = doc.querySelectorAll('input');
+        inputs.forEach(input => {
+            if (input.ariaLabel && (input.ariaLabel.includes('距離') || input.ariaLabel.includes('料金'))) {
+                input.type = 'number'; input.inputMode = 'numeric';
+            }
+        });
+    }, 1000);
+    </script>
+""", height=0)
