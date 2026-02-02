@@ -37,7 +37,7 @@ css_code = f"""
     .gas-settings {{ background: #f0f2f6; padding: 15px; border-radius: 10px; border: 2px solid #1A237E; margin-bottom: 20px; }}
     .stButton>button {{ background-color: #1A237E !important; color: white !important; border-radius: 25px !important; font-weight: bold !important; }}
     
-    /* 集計ボックス - 管理者・個人共通 */
+    /* 集計ボックス */
     .summary-box {{
         background-color: #ffffff;
         padding: 15px;
@@ -60,18 +60,18 @@ css_code = f"""
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
-    /* 列幅固定 */
-    .col-date {{ width: 60px; }}
-    .col-dist {{ width: 80px; }}
-    .col-high {{ width: 100px; }}
-    .col-total {{ width: 110px; }}
-    .col-route {{ width: auto; }}
+    /* ★列幅の固定設定★ */
+    .col-date {{ width: 60px !important; }}
+    .col-dist {{ width: 80px !important; }}
+    .col-high {{ width: 100px !important; }}
+    .col-total {{ width: 110px !important; }}
+    .col-route {{ width: auto !important; }}
 
 </style>
 """
 st.markdown(css_code, unsafe_allow_html=True)
 
-# --- データ・設定処理 ---
+# --- データ処理 ---
 CSV_FILE = "expenses.csv"
 CONFIG_FILE = "config.txt"
 COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合計金額"]
@@ -125,28 +125,20 @@ if is_admin:
                 
                 if show_det:
                     u_det = admin_df[admin_df["名前"] == row["名前"]].copy()
-                    # 明細テーブル
+                    # ★修正：thにclassを適用し幅を固定★
                     rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in u_det.iterrows()])
                     st.markdown(f'<table class="table-style"><thead><tr><th class="col-date">日付</th><th class="col-route">区間</th><th class="col-dist">距離</th><th class="col-high">高速</th><th class="col-total">合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
-                    
-                    # ★管理者側の明細下にも集計ボックスを追加★
-                    u_dist_sum = u_det["走行距離"].sum()
-                    u_high_sum = u_det["高速道路料金"].sum()
-                    u_total_sum = u_det["合計金額"].sum()
                     
                     st.markdown(f"""
                     <div class="summary-box">
                         <div style="display: flex; justify-content: space-around; text-align: center;">
-                            <div><div class="summary-item">距離合計</div><div class="summary-val">{u_dist_sum:,.1f} km</div></div>
-                            <div><div class="summary-item">高速合計</div><div class="summary-val">{int(u_high_sum):,} 円</div></div>
-                            <div><div class="summary-item">合計金額</div><div class="summary-val">{int(u_total_sum):,} 円</div></div>
+                            <div><div class="summary-item">距離合計</div><div class="summary-val">{u_det["走行距離"].sum():,.1f} km</div></div>
+                            <div><div class="summary-item">高速合計</div><div class="summary-val">{int(u_det["高速道路料金"].sum()):,} 円</div></div>
+                            <div><div class="summary-item">合計金額</div><div class="summary-val">{int(u_det["合計金額"].sum()):,} 円</div></div>
                         </div>
                     </div>""", unsafe_allow_html=True)
                     
                 st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
-            
-            csv_data = admin_df.drop(columns=['年月']).to_csv(index=False).encode('utf_8_sig')
-            st.download_button(label="📥 CSVダウンロード", data=csv_data, file_name=f"集計_{target_month}.csv")
 else:
     # --- 個人申請モード ---
     name_list = ["石原", "斎藤", "中村", "鎌田", "山本大", "山本和", "松山", "乱", "虎", "横井", "大宮"] 
@@ -164,7 +156,7 @@ else:
             c1, c2 = st.columns(2)
             with c1:
                 input_date = st.date_input("日付", date.today())
-                route = st.text_input("区間", placeholder="例：事務所〜現場")
+                route = st.text_input("区間", placeholder="事務所〜現場")
             with c2:
                 dist_str = st.text_input("走行距離 (km)", placeholder="10.5")
                 high_str = st.text_input("高速道路料金 (円)", value="0")
@@ -178,7 +170,6 @@ else:
             dist_val = get_clean_float(dist_str)
             highway_val = get_clean_float(high_str)
             auto_total = int((dist_val * gas_price) + highway_val)
-            
             st.markdown(f"**合計計算: {auto_total:,} 円**")
 
             if st.button("登録する", use_container_width=True):
@@ -190,10 +181,10 @@ else:
             if not filtered_df.empty:
                 st.markdown("---")
                 st.write("### 🗓️ 走行明細履歴")
+                # ★修正：thにclassを適用し幅を固定★
                 rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
                 st.markdown(f'<table class="table-style"><thead><tr><th class="col-date">日付</th><th class="col-route">区間</th><th class="col-dist">距離</th><th class="col-high">高速</th><th class="col-total">合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
 
-                # 個人側の集計ボックス
                 st.markdown(f"""
                 <div class="summary-box">
                     <div style="display: flex; justify-content: space-around; text-align: center;">
