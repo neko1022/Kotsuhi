@@ -62,9 +62,9 @@ css_code = f"""
 
     /* ★列幅の固定設定（強制適用）★ */
     .col-date {{ width: 60px !important; }}
-    .col-dist {{ width: 80px !important; }}
-    .col-high {{ width: 100px !important; }}
-    .col-total {{ width: 110px !important; }}
+    .col-dist {{ width: 150px !important; }}
+    .col-high {{ width: 150px !important; }}
+    .col-total {{ width: 150px !important; }}
     .col-route {{ width: auto !important; }}
 
 </style>
