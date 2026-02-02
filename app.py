@@ -53,6 +53,15 @@ css_code = f"""
     .table-style {{ width: 100%; border-collapse: collapse; background-color: white; border-radius: 5px; table-layout: fixed; }}
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
+
+    /* --- ここから追記 --- */
+    .col-date { width: 60px !important; }    /* 日付の幅 */
+    .col-route { width: auto !important; }   /* 区間の幅（自動で広がる） */
+    .col-dist { width: 15% !important; }    /* 距離の幅 */
+    .col-highway { width: 15% !important; } /* 高速代の幅 */
+    .col-total { width: 90px !important; }   /* 合計の幅 */
+    /* --- ここまで追記 --- */
+
 </style>
 """
 st.markdown(css_code, unsafe_allow_html=True)
