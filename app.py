@@ -39,6 +39,18 @@ css_code = f"""
     .gas-settings {{ background: #f0f2f6; padding: 15px; border-radius: 10px; border: 2px solid #1A237E; margin-bottom: 20px; }}
     .stButton>button {{ background-color: #1A237E !important; color: white !important; border-radius: 25px !important; font-weight: bold !important; }}
     
+    /* 集計ボックスのスタイル */
+    .summary-box {{
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #1A237E;
+        margin-top: 15px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }}
+    .summary-item {{ font-size: 0.9rem; color: #555; }}
+    .summary-val {{ font-size: 1.2rem; font-weight: bold; color: #1A237E; }}
+
     .table-style {{ width: 100%; border-collapse: collapse; background-color: white; border-radius: 5px; table-layout: fixed; }}
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
@@ -79,7 +91,6 @@ is_admin = st.toggle("🛠️ 管理者モード")
 if is_admin:
     pwd = st.text_input("管理者パスワード", type="password")
     if pwd == ADMIN_PASS:
-        # ガソリン単価設定
         st.markdown('<div class="form-title">⛽ ガソリン単価設定</div>', unsafe_allow_html=True)
         st.markdown('<div class="gas-settings">', unsafe_allow_html=True)
         new_gas_price = st.number_input("1kmあたりのガソリン代 (円)", value=gas_price, step=0.1)
@@ -97,18 +108,12 @@ if is_admin:
             total_admin = admin_df["合計金額"].sum()
             st.markdown(f'<div class="header-box"><p class="total-label">{target_month} 全員合計</p><p class="total-a">{int(total_admin):,} 円</p></div>', unsafe_allow_html=True)
             
-            # --- ここから個人別明細表示 (seisan1の機能を移植) ---
             user_summary = admin_df.groupby("名前")["合計金額"].sum().reset_index()
             for idx, row in user_summary.iterrows():
                 c_switch, c_name, c_amt = st.columns([1, 2, 2])
-                with c_switch:
-                    # 個別の明細トグル
-                    show_detail = st.toggle("明細", key=f"details_{idx}")
-                with c_name:
-                    st.write(f"**{row['名前']}**")
-                with c_amt:
-                    st.write(f"{int(row['合計金額']):,} 円")
-                
+                with c_switch: show_detail = st.toggle("明細", key=f"details_{idx}")
+                with c_name: st.write(f"**{row['名前']}**")
+                with c_amt: st.write(f"{int(row['合計金額']):,} 円")
                 if show_detail:
                     u_detail = admin_df[admin_df["名前"] == row["名前"]].copy()
                     rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in u_detail.iterrows()])
@@ -129,6 +134,7 @@ else:
             month_list = sorted(df_all['年月'].unique(), reverse=True) if not df_all.empty else []
             selected_month = st.selectbox("表示月", month_list) if month_list else ""
             filtered_df = df_all[(df_all['年月'] == selected_month) & (df_all['名前'] == selected_user)].copy() if selected_month else pd.DataFrame(columns=COLS)
+            
             st.markdown(f'<div class="header-box"><p class="total-label">{selected_user} さんの合計</p><p class="total-a">{int(filtered_df["合計金額"].sum()):,} 円</p></div>', unsafe_allow_html=True)
 
             st.markdown(f'<div class="form-title">🚗 走行データ入力 (単価: {gas_price}円/km)</div>', unsafe_allow_html=True)
@@ -162,30 +168,7 @@ else:
             if not filtered_df.empty:
                 st.markdown("---")
                 st.write("### 🗓️ 走行明細履歴")
-                delete_mode = st.toggle("🗑️ 編集・削除モード")
-                if delete_mode:
-                    for idx, row in filtered_df.iterrows():
-                        cols = st.columns([5, 1])
-                        with cols[0]: st.write(f"【{row['日付'].strftime('%m-%d')}】 {row['区間']} / {int(row['合計金額']):,}円")
-                        with cols[1]:
-                            if st.button("🗑️", key=f"del_{idx}"):
-                                df_all.drop(idx).drop(columns=['年月'], errors='ignore').to_csv(CSV_FILE, index=False)
-                                st.rerun()
-                else:
-                    rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
-                    st.markdown(f'<table class="table-style"><thead><tr><th>日付</th><th>区間</th><th>距離</th><th>高速代</th><th>合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_html=True)
-
-# JavaScript (テンキー対応)
-components.html("""
-    <script>
-    const doc = window.parent.document;
-    setInterval(() => {
-        const inputs = doc.querySelectorAll('input');
-        inputs.forEach(input => {
-            if (input.ariaLabel && (input.ariaLabel.includes('距離') || input.ariaLabel.includes('料金'))) {
-                input.type = 'number'; input.inputMode = 'numeric';
-            }
-        });
-    }, 1000);
-    </script>
-""", height=0)
+                
+                # テーブル表示
+                rows_html = "".join([f"<tr><td>{r['日付'].strftime('%m-%d')}</td><td>{r['区間']}</td><td>{r['走行距離']}km</td><td>{int(r['高速道路料金']):,}円</td><td>{int(r['合計金額']):,}円</td></tr>" for _, r in filtered_df.iterrows()])
+                st.markdown(f'<table class="table-style"><thead><tr><th>日付</th><th>区間</th><th>距離</th><th>高速代</th><th>合計</th></tr></thead><tbody>{rows_html}</tbody></table>', unsafe_allow_
