@@ -59,12 +59,11 @@ css_code = f"""
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
-    /* ★比率による列幅の固定設定（1:4:3:3:3に近い比率）★ */
-    .col-date {{ width: 7% !important; }}  /* 日付 */
-    .col-route {{ width: 30% !important; }} /* 区間 */
-    .col-dist {{ width: 20% !important; }}  /* 距離 */
-    .col-high {{ width: 20% !important; }}  /* 高速 */
-    .col-total {{ width: 23% !important; }} /* 合計 */
+    .col-date {{ width: 7% !important; }}
+    .col-route {{ width: 30% !important; }}
+    .col-dist {{ width: 20% !important; }}
+    .col-high {{ width: 20% !important; }}
+    .col-total {{ width: 23% !important; }}
 
 </style>
 """
@@ -73,13 +72,13 @@ st.markdown(css_code, unsafe_allow_html=True)
 # --- データ・設定処理 ---
 CSV_FILE = "expenses.csv"
 CONFIG_FILE = "config.txt"
+USER_FILE = "namae.txt" # ★追加
 COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合計金額"]
 
 def load_data():
     if os.path.exists(CSV_FILE):
         try:
             df = pd.read_csv(CSV_FILE)
-            if "名前" not in df.columns: df.insert(0, "名前", "石原")
             df["日付"] = pd.to_datetime(df["日付"]).dt.date
             return df.fillna("")
         except: return pd.DataFrame(columns=COLS)
@@ -92,9 +91,21 @@ def get_gas_price():
             except: return 15.0
     return 15.0
 
+# ★ユーザー情報をテキストから読み込む関数を追加
+def load_users():
+    users = {}
+    if os.path.exists(USER_FILE):
+        with open(USER_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) == 2:
+                    users[parts[0]] = parts[1]
+    return users
+
 df_all = load_data()
 gas_price = get_gas_price()
-ADMIN_PASS, USER_PASS = "1234", "0000"
+user_dict = load_users() # {名前: パスワード} の辞書
+ADMIN_PASS = "1234"
 
 # --- 画面構成 ---
 is_admin = st.toggle("🛠️ 管理者モード")
@@ -138,12 +149,13 @@ if is_admin:
                 st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
 else:
     # --- 個人申請モード ---
-    name_list = ["石原", "斎藤", "中村", "鎌田", "山本大", "山本和", "松山", "乱", "虎", "横井", "大宮"] 
+    name_list = list(user_dict.keys()) # ★テキストファイルから名前リストを取得
     selected_user = st.selectbox("申請者を選択", ["選択してください"] + name_list)
     
     if selected_user != "選択してください":
         user_pwd = st.text_input("パスワード", type="password")
-        if user_pwd == USER_PASS:
+        # ★選択したユーザーに対応するパスワードを照合
+        if user_pwd == user_dict.get(selected_user):
             df_all['年月'] = df_all['日付'].apply(lambda x: x.strftime('%Y年%m月')) if not df_all.empty else ""
             month_list = sorted(df_all['年月'].unique(), reverse=True) if not df_all.empty else []
             selected_month = st.selectbox("表示月", month_list) if month_list else ""
@@ -199,6 +211,8 @@ else:
                             if st.button("🗑️", key=f"del_{idx}"):
                                 df_all.drop(idx).drop(columns=['年月'], errors='ignore').to_csv(CSV_FILE, index=False)
                                 st.rerun()
+        elif user_pwd != "":
+            st.error("パスワードが違います")
 
 # テンキー対応
 components.html("""
