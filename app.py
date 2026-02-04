@@ -9,17 +9,14 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # --- スプレッドシート設定 ---
-# 指定いただいたURLに差し替えました
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/18VfgMTeRiMegmOHAhmsmq41js_LHLJ-3DUlkOQkLVIY/edit?gid=0#gid=0"
 
 def get_ss_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    # Secretsからサービスアカウント情報を読み込み
     service_account_info = json.loads(st.secrets["gcp_service_account"])
     credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(credentials)
-    # タブ名は「kotsuhi_data」であることを前提としています
-    return client.open_by_url(SPREADSHEET_URL).worksheet("kotsuhi_data")
+    return client.open_by_url(SPREADSHEET_URL)
 
 # ページ設定
 st.set_page_config(page_title="交通費精算システム", layout="wide")
@@ -41,11 +38,7 @@ css_code = f"""
         src: url(data:font/ttf;base64,{font_base64}) format('truetype');
     }}
     * {{ font-family: 'Mochiy Pop One', sans-serif !important; }}
-    
-    header, [data-testid="stHeader"], [data-testid="collapsedControl"] {{
-        display: none !important;
-        height: 0px !important;
-    }}
+    header, [data-testid="stHeader"], [data-testid="collapsedControl"] {{ display: none !important; }}
 
     .stApp {{ background-color: #E3F2FD !important; }}
     .header-box {{ border-bottom: 3px solid #1A237E; padding: 10px 0; margin-bottom: 20px; }}
@@ -53,24 +46,14 @@ css_code = f"""
     .stButton>button {{ background-color: #1A237E !important; color: white !important; border-radius: 25px !important; font-weight: bold !important; }}
     
     .summary-box {{
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 5px solid #1A237E;
-        margin-top: 10px;
-        margin-bottom: 20px;
+        background-color: #ffffff; padding: 15px; border-radius: 10px;
+        border-left: 5px solid #1A237E; margin-top: 10px; margin-bottom: 20px;
         box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
     }}
     .summary-item {{ font-size: 0.8rem; color: #555; }}
     .summary-val {{ font-size: 1.1rem; font-weight: bold; color: #1A237E; }}
 
-    .table-style {{ 
-        width: 100%; 
-        border-collapse: collapse;  
-        background-color: white;  
-        border-radius: 5px;  
-        table-layout: fixed;  
-    }}
+    .table-style {{ width: 100%; border-collapse: collapse; background-color: white; border-radius: 5px; table-layout: fixed; }}
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
@@ -83,14 +66,14 @@ css_code = f"""
 """
 st.markdown(css_code, unsafe_allow_html=True)
 
-# --- データ処理（元コードのロジックを維持） ---
-CONFIG_FILE = "config.txt"
+# --- 処理 ---
 USER_FILE = "namae.txt"
 COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合計金額"]
 
 def load_data():
     try:
-        sheet = get_ss_client()
+        ss = get_ss_client()
+        sheet = ss.worksheet("kotsuhi_data")
         data = sheet.get_all_records()
         if not data: return pd.DataFrame(columns=COLS)
         df = pd.DataFrame(data)
@@ -99,11 +82,12 @@ def load_data():
     except: return pd.DataFrame(columns=COLS)
 
 def get_gas_price():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, "r") as f:
-            try: return float(f.read())
-            except: return 15.0
-    return 15.0
+    try:
+        ss = get_ss_client()
+        conf_sheet = ss.worksheet("config")
+        val = conf_sheet.acell('A1').value
+        return float(val) if val else 15.0
+    except: return 15.0
 
 def load_users():
     users = {}
@@ -119,7 +103,7 @@ gas_price = get_gas_price()
 user_dict = load_users()
 ADMIN_PASS = "1234"
 
-# --- 画面構成 ---
+# --- 画面 ---
 is_admin = st.toggle("🛠️ 管理者モード")
 
 if is_admin:
@@ -128,8 +112,12 @@ if is_admin:
         st.markdown('<div class="form-title">⛽ ガソリン単価設定</div>', unsafe_allow_html=True)
         new_gas_price = st.number_input("1kmあたりのガソリン代 (円)", value=gas_price, step=0.1)
         if st.button("単価を更新する"):
-            with open(CONFIG_FILE, "w") as f: f.write(str(new_gas_price))
-            st.success("更新しました"); st.rerun()
+            try:
+                ss = get_ss_client()
+                conf_sheet = ss.worksheet("config")
+                conf_sheet.update_acell('A1', new_gas_price)
+                st.success("スプレッドシートの単価を更新しました"); st.rerun()
+            except: st.error("configシートのA1セルを更新できませんでした。")
 
         st.markdown('<div class="form-title">📊 交通費全体集計</div>', unsafe_allow_html=True)
         if not df_all.empty:
@@ -184,7 +172,8 @@ else:
             if st.button("登録する", use_container_width=True):
                 if dist_val > 0 or highway_val > 0:
                     try:
-                        sheet = get_ss_client()
+                        ss = get_ss_client()
+                        sheet = ss.worksheet("kotsuhi_data")
                         new_row = [selected_user, input_date.strftime("%Y/%m/%d"), route, dist_val, highway_val, auto_total]
                         sheet.append_row(new_row)
                         st.success("登録完了！"); st.rerun()
@@ -204,7 +193,8 @@ else:
                         with cols[1]:
                             if st.button("🗑️", key=f"del_{idx}"):
                                 try:
-                                    sheet = get_ss_client()
+                                    ss = get_ss_client()
+                                    sheet = ss.worksheet("kotsuhi_data")
                                     all_vals = sheet.get_all_values()
                                     target_row = -1
                                     for i, v in enumerate(all_vals):
@@ -217,7 +207,6 @@ else:
                                         st.rerun()
                                 except: st.error("削除エラー")
 
-# テンキー対応
 components.html("""
 <script>
 const doc = window.parent.document;
