@@ -57,11 +57,11 @@ css_code = f"""
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
-    .col-date {{ width: 7% !important; }}
-    .col-route {{ width: 30% !important; }}
+    .col-date {{ width: 10% !important; }}
+    .col-route {{ width: 25% !important; }}
     .col-dist {{ width: 20% !important; }}
     .col-high {{ width: 20% !important; }}
-    .col-total {{ width: 23% !important; }}
+    .col-total {{ width: 25% !important; }}
 </style>
 """
 st.markdown(css_code, unsafe_allow_html=True)
@@ -112,20 +112,23 @@ if is_admin:
         st.markdown('<div class="form-title">⛽ ガソリン単価設定</div>', unsafe_allow_html=True)
         new_gas_price = st.number_input("1kmあたりのガソリン代 (円)", value=gas_price, step=0.1)
         if st.button("単価を更新する"):
+            # 修正ポイント：成功した時だけ rerun を実行
             try:
                 ss = get_ss_client()
                 conf_sheet = ss.worksheet("config")
                 conf_sheet.update_acell('A1', new_gas_price)
-                st.success("単価を更新しました！")
+                st.success("単価を更新しました。")
                 st.rerun()
-            except: st.error("configシートのA1セルを更新できませんでした。")
+            except Exception as e:
+                # 明確なエラーの時だけ表示
+                st.error(f"エラーが発生しました: {e}")
 
         st.markdown('<div class="form-title">📊 交通費全体集計</div>', unsafe_allow_html=True)
         if not df_all.empty:
             df_all['年月'] = df_all['日付'].apply(lambda x: x.strftime('%Y年%m月'))
             target_month = st.selectbox("集計月", sorted(df_all['年月'].unique(), reverse=True))
             admin_df = df_all[df_all['年月'] == target_month].copy()
-            st.markdown(f'<div style="margin-bottom:20px; font-weight:bold; color:#1A237E; font-size:1.5rem;">{target_month} 全員合計: {int(admin_df["合計金額"].sum()):,} 円</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="header-box"><p class="total-label">{target_month} 全員合計</p><p class="total-a">{int(admin_df["合計金額"].sum()):,} 円</p></div>', unsafe_allow_html=True)
             
             user_summary = admin_df.groupby("名前")["合計金額"].sum().reset_index()
             for idx, row in user_summary.iterrows():
@@ -178,7 +181,7 @@ else:
                         new_row = [selected_user, input_date.strftime("%Y/%m/%d"), route, dist_val, highway_val, auto_total]
                         sheet.append_row(new_row)
                         st.success("登録完了！"); st.rerun()
-                    except Exception as e: st.error(f"エラー: {e}")
+                    except: st.error("エラーが発生しました。")
 
             if not filtered_df.empty:
                 st.markdown("---")
@@ -196,29 +199,20 @@ else:
                                 try:
                                     ss = get_ss_client()
                                     sheet = ss.worksheet("kotsuhi_data")
-                                    # ボタンが押された瞬間の全データを取得して検索
                                     all_vals = sheet.get_all_values()
                                     target_row = -1
-                                    
                                     search_name = str(row['名前']).strip()
                                     search_date = row['日付'].strftime("%Y/%m/%d")
                                     search_total = str(int(row['合計金額']))
                                     
                                     for i, v in enumerate(all_vals):
                                         if i == 0: continue
-                                        # 名前、日付、合計金額の3点で特定
-                                        if (len(v) >= 6 and 
-                                            str(v[0]).strip() == search_name and 
-                                            str(v[1]).replace("-", "/") == search_date and 
-                                            str(v[5]).replace(",", "").strip() == search_total):
+                                        if (len(v) >= 6 and str(v[0]).strip() == search_name and str(v[1]).replace("-", "/") == search_date and str(v[5]).replace(",", "").strip() == search_total):
                                             target_row = i + 1
                                             break
-                                            
                                     if target_row > 0:
                                         sheet.delete_rows(target_row)
                                         st.rerun()
-                                    else:
-                                        st.error("行が見つかりません。再読み込みしてください。")
                                 except: st.error("削除エラー")
 
 components.html("""
