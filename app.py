@@ -116,7 +116,8 @@ if is_admin:
                 ss = get_ss_client()
                 conf_sheet = ss.worksheet("config")
                 conf_sheet.update_acell('A1', new_gas_price)
-                st.success("スプレッドシートの単価を更新しました"); st.rerun()
+                st.success("単価を更新しました！")
+                st.rerun()
             except: st.error("configシートのA1セルを更新できませんでした。")
 
         st.markdown('<div class="form-title">📊 交通費全体集計</div>', unsafe_allow_html=True)
@@ -195,16 +196,29 @@ else:
                                 try:
                                     ss = get_ss_client()
                                     sheet = ss.worksheet("kotsuhi_data")
+                                    # ボタンが押された瞬間の全データを取得して検索
                                     all_vals = sheet.get_all_values()
                                     target_row = -1
+                                    
+                                    search_name = str(row['名前']).strip()
+                                    search_date = row['日付'].strftime("%Y/%m/%d")
+                                    search_total = str(int(row['合計金額']))
+                                    
                                     for i, v in enumerate(all_vals):
                                         if i == 0: continue
-                                        if v[0] == row['名前'] and v[1].replace("-", "/") == row['日付'].strftime("%Y/%m/%d") and v[2] == row['区間'] and int(float(v[5])) == int(row['合計金額']):
+                                        # 名前、日付、合計金額の3点で特定
+                                        if (len(v) >= 6 and 
+                                            str(v[0]).strip() == search_name and 
+                                            str(v[1]).replace("-", "/") == search_date and 
+                                            str(v[5]).replace(",", "").strip() == search_total):
                                             target_row = i + 1
                                             break
+                                            
                                     if target_row > 0:
                                         sheet.delete_rows(target_row)
                                         st.rerun()
+                                    else:
+                                        st.error("行が見つかりません。再読み込みしてください。")
                                 except: st.error("削除エラー")
 
 components.html("""
