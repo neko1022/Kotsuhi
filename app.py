@@ -2,8 +2,24 @@ import streamlit as st
 import pandas as pd
 import os
 import base64
+import json
 from datetime import date
 import streamlit.components.v1 as components
+import gspread
+from google.oauth2.service_account import Credentials
+
+# --- スプレッドシート設定 (Secretsから読み込み) ---
+# 会社アカウントで作ったスプレッドシートのURLをここに貼り付けてください
+SPREADSHEET_URL = "ここにURLを貼り付け"
+
+def get_ss_client():
+    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    # Streamlit CloudのSecretsに設定した情報を読み込み
+    service_account_info = json.loads(st.secrets["gcp_service_account"])
+    credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+    client = gspread.authorize(credentials)
+    # タブ名「kotsuhi_data」を開く
+    return client.open_by_url(SPREADSHEET_URL).worksheet("kotsuhi_data")
 
 # ページ設定
 st.set_page_config(page_title="交通費精算システム", layout="wide")
@@ -64,25 +80,24 @@ css_code = f"""
     .col-dist {{ width: 20% !important; }}
     .col-high {{ width: 20% !important; }}
     .col-total {{ width: 23% !important; }}
-
 </style>
 """
 st.markdown(css_code, unsafe_allow_html=True)
 
 # --- データ・設定処理 ---
-CSV_FILE = "expenses.csv"
 CONFIG_FILE = "config.txt"
-USER_FILE = "namae.txt" # ★追加
+USER_FILE = "namae.txt"
 COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合計金額"]
 
 def load_data():
-    if os.path.exists(CSV_FILE):
-        try:
-            df = pd.read_csv(CSV_FILE)
-            df["日付"] = pd.to_datetime(df["日付"]).dt.date
-            return df.fillna("")
-        except: return pd.DataFrame(columns=COLS)
-    return pd.DataFrame(columns=COLS)
+    try:
+        sheet = get_ss_client()
+        data = sheet.get_all_records()
+        if not data: return pd.DataFrame(columns=COLS)
+        df = pd.DataFrame(data)
+        df["日付"] = pd.to_datetime(df["日付"]).dt.date
+        return df.fillna("")
+    except: return pd.DataFrame(columns=COLS)
 
 def get_gas_price():
     if os.path.exists(CONFIG_FILE):
@@ -91,20 +106,18 @@ def get_gas_price():
             except: return 15.0
     return 15.0
 
-# ★ユーザー情報をテキストから読み込む関数を追加
 def load_users():
     users = {}
     if os.path.exists(USER_FILE):
         with open(USER_FILE, "r", encoding="utf-8") as f:
             for line in f:
                 parts = line.strip().split(",")
-                if len(parts) == 2:
-                    users[parts[0]] = parts[1]
+                if len(parts) == 2: users[parts[0]] = parts[1]
     return users
 
 df_all = load_data()
 gas_price = get_gas_price()
-user_dict = load_users() # {名前: パスワード} の辞書
+user_dict = load_users() 
 ADMIN_PASS = "1234"
 
 # --- 画面構成 ---
@@ -141,25 +154,24 @@ if is_admin:
                     st.markdown(f"""
                     <div class="summary-box">
                         <div style="display: flex; justify-content: space-around; text-align: center;">
-                            <div><div class="summary-item">距離合計</div><div class="summary-val">{u_det["走行距離"].sum():,.1f} km</div></div>
-                            <div><div class="summary-item">高速合計</div><div class="summary-val">{int(u_det["高速道路料金"].sum()):,} 円</div></div>
-                            <div><div class="summary-item">合計金額</div><div class="summary-val">{int(u_det["合計金額"].sum()):,} 円</div></div>
+                            <div><div class="summary-item">距離合計</div><div class="summary-val">{{u_det["走行距離"].sum():,.1f}} km</div></div>
+                            <div><div class="summary-item">高速合計</div><div class="summary-val">{{int(u_det["高速道路料金"].sum()):,}} 円</div></div>
+                            <div><div class="summary-item">合計金額</div><div class="summary-val">{{int(u_det["合計金額"].sum()):,}} 円</div></div>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 st.markdown("<hr style='margin:5px 0;'>", unsafe_allow_html=True)
 else:
     # --- 個人申請モード ---
-    name_list = list(user_dict.keys()) # ★テキストファイルから名前リストを取得
+    name_list = list(user_dict.keys()) 
     selected_user = st.selectbox("申請者を選択", ["選択してください"] + name_list)
     
     if selected_user != "選択してください":
         user_pwd = st.text_input("パスワード", type="password")
-        # ★選択したユーザーに対応するパスワードを照合
         if user_pwd == user_dict.get(selected_user):
             df_all['年月'] = df_all['日付'].apply(lambda x: x.strftime('%Y年%m月')) if not df_all.empty else ""
-            month_list = sorted(df_all['年月'].unique(), reverse=True) if not df_all.empty else []
-            selected_month = st.selectbox("表示月", month_list) if month_list else ""
-            filtered_df = df_all[(df_all['年月'] == selected_month) & (df_all['名前'] == selected_user)].copy() if selected_month else pd.DataFrame(columns=COLS)
+            month_list = sorted(df_all['年月'].unique(), reverse=True) if not df_all.empty else [date.today().strftime('%Y年%m月')]
+            selected_month = st.selectbox("表示月", month_list)
+            filtered_df = df_all[(df_all['年月'] == selected_month) & (df_all['名前'] == selected_user)].copy() if not df_all.empty else pd.DataFrame(columns=COLS)
             
             st.markdown(f'<div class="form-title">🚗 走行入力 (単価: {gas_price}円/km)</div>', unsafe_allow_html=True)
             c1, c2 = st.columns(2)
@@ -183,9 +195,12 @@ else:
 
             if st.button("登録する", use_container_width=True):
                 if dist_val > 0 or highway_val > 0:
-                    new_row = pd.DataFrame([[selected_user, input_date, route, dist_val, highway_val, auto_total]], columns=COLS)
-                    pd.concat([df_all.drop(columns=['年月'], errors='ignore'), new_row], ignore_index=True).to_csv(CSV_FILE, index=False)
-                    st.success("登録完了！"); st.rerun()
+                    try:
+                        sheet = get_ss_client()
+                        new_row = [selected_user, input_date.strftime("%Y/%m/%d"), route, dist_val, highway_val, auto_total]
+                        sheet.append_row(new_row)
+                        st.success("登録完了！"); st.rerun()
+                    except Exception as e: st.error(f"エラー: {e}")
 
             if not filtered_df.empty:
                 st.markdown("---")
@@ -196,9 +211,9 @@ else:
                 st.markdown(f"""
                 <div class="summary-box">
                     <div style="display: flex; justify-content: space-around; text-align: center;">
-                        <div><div class="summary-item">距離合計</div><div class="summary-val">{filtered_df["走行距離"].sum():,.1f} km</div></div>
-                        <div><div class="summary-item">高速合計</div><div class="summary-val">{int(filtered_df["高速道路料金"].sum()):,} 円</div></div>
-                        <div><div class="summary-item">総合計</div><div class="summary-val">{int(filtered_df["合計金額"].sum()):,} 円</div></div>
+                        <div><div class="summary-item">距離合計</div><div class="summary-val">{{filtered_df["走行距離"].sum():,.1f}} km</div></div>
+                        <div><div class="summary-item">高速合計</div><div class="summary-val">{{int(filtered_df["高速道路料金"].sum()):,}} 円</div></div>
+                        <div><div class="summary-item">総合計</div><div class="summary-val">{{int(filtered_df["合計金額"].sum()):,}} 円</div></div>
                     </div>
                 </div>""", unsafe_allow_html=True)
 
@@ -209,8 +224,19 @@ else:
                         with cols[0]: st.write(f"{row['日付'].strftime('%m-%d')} {row['区間']} {int(row['合計金額']):,}円")
                         with cols[1]:
                             if st.button("🗑️", key=f"del_{idx}"):
-                                df_all.drop(idx).drop(columns=['年月'], errors='ignore').to_csv(CSV_FILE, index=False)
-                                st.rerun()
+                                try:
+                                    sheet = get_ss_client()
+                                    all_vals = sheet.get_all_values()
+                                    target_row = -1
+                                    for i, v in enumerate(all_vals):
+                                        if i == 0: continue
+                                        if v[0] == row['名前'] and v[1].replace("-", "/") == row['日付'].strftime("%Y/%m/%d") and v[2] == row['区間'] and int(float(v[5])) == int(row['合計金額']):
+                                            target_row = i + 1
+                                            break
+                                    if target_row > 0:
+                                        sheet.delete_rows(target_row)
+                                        st.rerun()
+                                except: st.error("削除エラー")
         elif user_pwd != "":
             st.error("パスワードが違います")
 
