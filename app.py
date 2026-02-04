@@ -9,10 +9,12 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # --- スプレッドシート設定 ---
+# 指定いただいたURLを使用
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/18VfgMTeRiMegmOHAhmsmq41js_LHLJ-3DUlkOQkLVIY/edit?gid=0#gid=0"
 
 def get_ss_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    # Secretsからサービスアカウント情報を読み込み
     service_account_info = json.loads(st.secrets["gcp_service_account"])
     credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(credentials)
@@ -57,11 +59,12 @@ css_code = f"""
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
+    /* ご希望の比率 */
     .col-date {{ width: 10% !important; }}
-    .col-route {{ width: 25% !important; }}
+    .col-route {{ width: 20% !important; }}
     .col-dist {{ width: 20% !important; }}
     .col-high {{ width: 20% !important; }}
-    .col-total {{ width: 25% !important; }}
+    .col-total {{ width: 30% !important; }}
 </style>
 """
 st.markdown(css_code, unsafe_allow_html=True)
@@ -73,7 +76,7 @@ COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合
 def load_data():
     try:
         ss = get_ss_client()
-        sheet = ss.worksheet("kotsuhi_data")
+        sheet = ss.worksheet("kotsuhi_data") # タブ名を確認
         data = sheet.get_all_records()
         if not data: return pd.DataFrame(columns=COLS)
         df = pd.DataFrame(data)
@@ -84,7 +87,7 @@ def load_data():
 def get_gas_price():
     try:
         ss = get_ss_client()
-        conf_sheet = ss.worksheet("config")
+        conf_sheet = ss.worksheet("config") # タブ名を確認
         val = conf_sheet.acell('A1').value
         return float(val) if val else 15.0
     except: return 15.0
@@ -103,7 +106,7 @@ gas_price = get_gas_price()
 user_dict = load_users()
 ADMIN_PASS = "1234"
 
-# --- 画面 ---
+# --- 画面構成 ---
 is_admin = st.toggle("🛠️ 管理者モード")
 
 if is_admin:
@@ -112,16 +115,14 @@ if is_admin:
         st.markdown('<div class="form-title">⛽ ガソリン単価設定</div>', unsafe_allow_html=True)
         new_gas_price = st.number_input("1kmあたりのガソリン代 (円)", value=gas_price, step=0.1)
         if st.button("単価を更新する"):
-            # 修正ポイント：成功した時だけ rerun を実行
             try:
                 ss = get_ss_client()
                 conf_sheet = ss.worksheet("config")
                 conf_sheet.update_acell('A1', new_gas_price)
                 st.success("単価を更新しました。")
                 st.rerun()
-            except Exception as e:
-                # 明確なエラーの時だけ表示
-                st.error(f"エラーが発生しました: {e}")
+            except:
+                st.error("更新中にエラーが発生しました。もう一度お試しください。")
 
         st.markdown('<div class="form-title">📊 交通費全体集計</div>', unsafe_allow_html=True)
         if not df_all.empty:
@@ -180,8 +181,12 @@ else:
                         sheet = ss.worksheet("kotsuhi_data")
                         new_row = [selected_user, input_date.strftime("%Y/%m/%d"), route, dist_val, highway_val, auto_total]
                         sheet.append_row(new_row)
-                        st.success("登録完了！"); st.rerun()
-                    except: st.error("エラーが発生しました。")
+                        st.success("登録完了しました！")
+                        st.rerun()
+                    except:
+                        st.error("登録中に問題が発生しました。シートを確認してください。")
+                else:
+                    st.warning("距離または高速料金を入力してください。")
 
             if not filtered_df.empty:
                 st.markdown("---")
@@ -215,6 +220,7 @@ else:
                                         st.rerun()
                                 except: st.error("削除エラー")
 
+# テンキー対応
 components.html("""
 <script>
 const doc = window.parent.document;
