@@ -9,12 +9,10 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # --- スプレッドシート設定 ---
-# 指定いただいたURLを使用
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/18VfgMTeRiMegmOHAhmsmq41js_LHLJ-3DUlkOQkLVIY/edit?gid=0#gid=0"
 
 def get_ss_client():
     scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    # Secretsからサービスアカウント情報を読み込み
     service_account_info = json.loads(st.secrets["gcp_service_account"])
     credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(credentials)
@@ -59,24 +57,21 @@ css_code = f"""
     .table-style th {{ background: #1A237E; color: white; padding: 8px 5px; text-align: left; font-size: 0.8rem; }}
     .table-style td {{ border-bottom: 1px solid #eee; padding: 10px 5px; color: #333; font-size: 0.8rem; word-wrap: break-word; }}
 
-    /* ご希望の比率 */
-    .col-date {{ width: 10% !important; }}
-    .col-route {{ width: 20% !important; }}
+    .col-date {{ width: 7% !important; }}
+    .col-route {{ width: 30% !important; }}
     .col-dist {{ width: 20% !important; }}
     .col-high {{ width: 20% !important; }}
-    .col-total {{ width: 30% !important; }}
+    .col-total {{ width: 23% !important; }}
 </style>
 """
 st.markdown(css_code, unsafe_allow_html=True)
 
-# --- 処理 ---
-USER_FILE = "namae.txt"
-COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合計金額"]
-
+# --- データ処理（キャッシュを利用して高速化） ---
+@st.cache_data(ttl=60)
 def load_data():
     try:
         ss = get_ss_client()
-        sheet = ss.worksheet("kotsuhi_data") # タブ名を確認
+        sheet = ss.worksheet("kotsuhi_data")
         data = sheet.get_all_records()
         if not data: return pd.DataFrame(columns=COLS)
         df = pd.DataFrame(data)
@@ -84,10 +79,11 @@ def load_data():
         return df.fillna("")
     except: return pd.DataFrame(columns=COLS)
 
+@st.cache_data(ttl=60)
 def get_gas_price():
     try:
         ss = get_ss_client()
-        conf_sheet = ss.worksheet("config") # タブ名を確認
+        conf_sheet = ss.worksheet("config")
         val = conf_sheet.acell('A1').value
         return float(val) if val else 15.0
     except: return 15.0
@@ -101,6 +97,11 @@ def load_users():
                 if len(parts) == 2: users[parts[0]] = parts[1]
     return users
 
+# 定数設定
+USER_FILE = "namae.txt"
+COLS = ["名前", "日付", "区間", "走行距離", "高速道路料金", "合計金額"]
+
+# 初期ロード
 df_all = load_data()
 gas_price = get_gas_price()
 user_dict = load_users()
@@ -119,17 +120,18 @@ if is_admin:
                 ss = get_ss_client()
                 conf_sheet = ss.worksheet("config")
                 conf_sheet.update_acell('A1', new_gas_price)
-                st.success("単価を更新しました。")
+                st.cache_data.clear() # キャッシュをクリア
+                st.success("スプレッドシートの単価を更新しました")
                 st.rerun()
-            except:
-                st.error("更新中にエラーが発生しました。もう一度お試しください。")
+            except Exception as e:
+                st.error(f"更新失敗: {e}")
 
         st.markdown('<div class="form-title">📊 交通費全体集計</div>', unsafe_allow_html=True)
         if not df_all.empty:
             df_all['年月'] = df_all['日付'].apply(lambda x: x.strftime('%Y年%m月'))
             target_month = st.selectbox("集計月", sorted(df_all['年月'].unique(), reverse=True))
             admin_df = df_all[df_all['年月'] == target_month].copy()
-            st.markdown(f'<div class="header-box"><p class="total-label">{target_month} 全員合計</p><p class="total-a">{int(admin_df["合計金額"].sum()):,} 円</p></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="margin-bottom:20px; font-weight:bold; color:#1A237E; font-size:1.5rem;">{target_month} 全員合計: {int(admin_df["合計金額"].sum()):,} 円</div>', unsafe_allow_html=True)
             
             user_summary = admin_df.groupby("名前")["合計金額"].sum().reset_index()
             for idx, row in user_summary.iterrows():
@@ -149,6 +151,7 @@ else:
     if selected_user != "選択してください":
         user_pwd = st.text_input("パスワード", type="password")
         if user_pwd == user_dict.get(selected_user):
+            # 表示用年月作成
             df_all['年月'] = df_all['日付'].apply(lambda x: x.strftime('%Y年%m月')) if not df_all.empty else ""
             month_list = sorted(df_all['年月'].unique(), reverse=True) if not df_all.empty else [date.today().strftime('%Y年%m月')]
             selected_month = st.selectbox("表示月", month_list)
@@ -161,7 +164,7 @@ else:
                 route = st.text_input("区間", placeholder="事務所〜現場")
             with c2:
                 dist_str = st.text_input("走行距離 (km)", placeholder="10.5")
-                high_str = st.text_input("高速道路料金 (円)", placeholder="1500")
+                high_str = st.text_input("高速道路料金 (円)", placeholder="例: 1500")
 
             def get_clean_float(s):
                 try:
@@ -181,12 +184,10 @@ else:
                         sheet = ss.worksheet("kotsuhi_data")
                         new_row = [selected_user, input_date.strftime("%Y/%m/%d"), route, dist_val, highway_val, auto_total]
                         sheet.append_row(new_row)
-                        st.success("登録完了しました！")
-                        st.rerun()
-                    except:
-                        st.error("登録中に問題が発生しました。シートを確認してください。")
-                else:
-                    st.warning("距離または高速料金を入力してください。")
+                        st.cache_data.clear() # キャッシュを消して最新化
+                        st.success("登録完了！")
+                        st.rerun() # 強制リロード
+                    except Exception as e: st.error(f"登録エラー: {e}")
 
             if not filtered_df.empty:
                 st.markdown("---")
@@ -206,21 +207,29 @@ else:
                                     sheet = ss.worksheet("kotsuhi_data")
                                     all_vals = sheet.get_all_values()
                                     target_row = -1
+                                    
+                                    # 削除対象の特定ロジックを厳密化
                                     search_name = str(row['名前']).strip()
                                     search_date = row['日付'].strftime("%Y/%m/%d")
                                     search_total = str(int(row['合計金額']))
                                     
                                     for i, v in enumerate(all_vals):
                                         if i == 0: continue
-                                        if (len(v) >= 6 and str(v[0]).strip() == search_name and str(v[1]).replace("-", "/") == search_date and str(v[5]).replace(",", "").strip() == search_total):
-                                            target_row = i + 1
-                                            break
+                                        if (len(v) >= 6 and 
+                                            str(v[0]).strip() == search_name and 
+                                            str(v[1]).replace("-", "/") == search_date and 
+                                            str(v[5]).replace(",", "").strip() == search_total):
+                                                target_row = i + 1
+                                                break
+                                    
                                     if target_row > 0:
                                         sheet.delete_rows(target_row)
+                                        st.cache_data.clear() # 画面を最新にするためにキャッシュクリア
                                         st.rerun()
-                                except: st.error("削除エラー")
+                                    else:
+                                        st.error("一致する行が見つかりません。再起動してください。")
+                                except Exception as e: st.error(f"削除エラー: {e}")
 
-# テンキー対応
 components.html("""
 <script>
 const doc = window.parent.document;
